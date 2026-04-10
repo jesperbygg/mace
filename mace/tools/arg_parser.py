@@ -170,9 +170,16 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--pair_repulsion",
-        help="use pair repulsion term with ZBL potential",
+        help="use pair repulsion term",
         action="store_true",
         default=False,
+    )
+    parser.add_argument(
+        "--pair_repulsion_type",
+        help="type of pair repulsion potential: NLH (recommended), ZBL, or modified ZBL (legacy)",
+        type=str,
+        default="legacy",
+        choices=["nlh", "zbl", "legacy"],
     )
     parser.add_argument(
         "--distance_transform",

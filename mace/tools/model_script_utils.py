@@ -252,6 +252,7 @@ def _build_model(
         return modules.ScaleShiftMACE(
             **model_config,
             pair_repulsion=args.pair_repulsion,
+            pair_repulsion_type=args.pair_repulsion_type,
             distance_transform=args.distance_transform,
             correlation=args.correlation,
             gate=modules.gate_dict[args.gate],
@@ -271,6 +272,7 @@ def _build_model(
         return modules.ScaleShiftMACE(
             **model_config,
             pair_repulsion=args.pair_repulsion,
+            pair_repulsion_type=args.pair_repulsion_type,
             distance_transform=args.distance_transform,
             correlation=args.correlation,
             gate=modules.gate_dict[args.gate],
@@ -296,6 +298,7 @@ def _build_model(
         return modules.PolarMACE(
             **model_config,
             pair_repulsion=args.pair_repulsion,
+            pair_repulsion_type=args.pair_repulsion_type,
             distance_transform=args.distance_transform,
             correlation=args.correlation,
             gate=modules.gate_dict[args.gate],
@@ -401,6 +404,7 @@ def _build_model(
             les_arguments=args.les_arguments,
             **model_config,
             pair_repulsion=args.pair_repulsion,
+            pair_repulsion_type=args.pair_repulsion_type,
             distance_transform=args.distance_transform,
             correlation=args.correlation,
             gate=modules.gate_dict[args.gate],

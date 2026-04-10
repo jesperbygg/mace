@@ -12,7 +12,7 @@ from e3nn import o3
 from e3nn.util.jit import compile_mode
 
 from mace.modules.embeddings import GenericJointEmbedding
-from mace.modules.radial import ZBLBasis
+from mace.modules.radial import ZBLBasis, UniversalZBLBasis, NLHBasis
 from mace.tools.scatter import scatter_mean, scatter_sum
 from mace.tools.torch_tools import get_change_of_basis, spherical_to_cartesian
 
@@ -62,6 +62,7 @@ class MACE(torch.nn.Module):
         correlation: Union[int, List[int]],
         gate: Optional[Callable],
         pair_repulsion: bool = False,
+        pair_repulsion_type: str = "legacy",
         apply_cutoff: bool = True,
         use_reduced_cg: bool = True,
         use_so3: bool = False,
@@ -139,8 +140,16 @@ class MACE(torch.nn.Module):
         )
         edge_feats_irreps = o3.Irreps(f"{self.radial_embedding.out_dim}x0e")
         if pair_repulsion:
-            self.pair_repulsion_fn = ZBLBasis(p=num_polynomial_cutoff)
             self.pair_repulsion = True
+            if pair_repulsion_type == "legacy":
+                self.pair_repulsion_fn = ZBLBasis(p=num_polynomial_cutoff)
+            elif pair_repulsion_type.lower() == "nlh":
+                self.pair_repulsion_fn = NLHBasis()
+            elif pair_repulsion_type.lower() == "zbl":
+                self.pair_repulsion_fn = UniversalZBLBasis()
+            else:
+                # bad user input: silent fall back to universal zbl for most flexibility
+                self.pair_repulsion_fn = UniversalZBLBasis()
 
         if not use_so3:
             sh_irreps = o3.Irreps.spherical_harmonics(max_ell)
