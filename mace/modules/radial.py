@@ -381,9 +381,9 @@ class NLHBasis(torch.nn.Module):
             raise ValueError("NLH only supports atomic numbers Z<=92, use universal ZBL instead")
         # get NLH params by Z
         if Z_u <= Z_v:
-            a1, b1, a2, b2, a3, b3 = self.nlh_params[(Z_u, Z_v)]
+            a1, b1, a2, b2, a3, b3 = self.nlh_params[Z_u, Z_v]
         else:
-            a1, b1, a2, b2, a3, b3 = self.nlh_params[(Z_v, Z_u)]
+            a1, b1, a2, b2, a3, b3 = self.nlh_params[Z_v, Z_u]
         phi = a1 * torch.exp(-b1 * x) + a2 * torch.exp(-b2 * x) + a3 * torch.exp(-b3 * x)
         v_edges = (14.3996 * Z_u * Z_v) / x * phi
         r_max = 0.7 * (self.covalent_radii[Z_u] + self.covalent_radii[Z_v])
