@@ -12,6 +12,7 @@ import torch
 from e3nn.util.jit import compile_mode
 
 from mace.tools.scatter import scatter_sum
+from mace.modules.nlh_parameters import nlh_params
 
 
 @compile_mode("script")
@@ -349,12 +350,9 @@ class NLHBasis(torch.nn.Module):
                 "r_max is deprecated. r_max is determined from the covalent radii."
             )
 
-        # TODO read in all NLH params, remember to deal with missing Z=94-95 and error Z>95
         self.register_buffer(
-            "c",
-            torch.tensor(
-                [0.1818, 0.5099, 0.2802, 0.02817], dtype=torch.get_default_dtype()
-            ),
+            "nlh_params",
+            torch.tensor(nlh_params, dtype=torch.get_default_dtype()),
         )
         self.register_buffer(
             "covalent_radii",
@@ -378,13 +376,15 @@ class NLHBasis(torch.nn.Module):
         )
         Z_u = node_atomic_numbers[sender].to(torch.int64)
         Z_v = node_atomic_numbers[receiver].to(torch.int64)
+        # TODO support Z>92 by reusing nlh Z=92 params or uniZBL...
+        if Z_u > 92 or Z_v > 92:
+            raise ValueError("NLH only supports atomic numbers Z<=92, use universal ZBL instead")
         # get NLH params by Z
-        phi = (
-            self.c[0] * torch.exp(-3.2 * x)
-            + self.c[1] * torch.exp(-0.9423 * x)
-            + self.c[2] * torch.exp(-0.4028 * x)
-            + self.c[3] * torch.exp(-0.2016 * x)
-        )
+        if Z_u <= Z_v:
+            a1, b1, a2, b2, a3, b3 = self.nlh_params[(Z_u, Z_v)]
+        else:
+            a1, b1, a2, b2, a3, b3 = self.nlh_params[(Z_v, Z_u)]
+        phi = a1 * torch.exp(-b1 * x) + a2 * torch.exp(-b2 * x) + a3 * torch.exp(-b3 * x)
         v_edges = (14.3996 * Z_u * Z_v) / x * phi
         r_max = 0.7 * (self.covalent_radii[Z_u] + self.covalent_radii[Z_v])
         r_min = 0.5 * r_max
@@ -394,7 +394,7 @@ class NLHBasis(torch.nn.Module):
         return V_NLH.squeeze(-1)
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(c={self.c})"
+        return f"{self.__class__.__name__}"
 
 
 @compile_mode("script")
