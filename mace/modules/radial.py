@@ -184,7 +184,13 @@ class SmoothstepCutoff(torch.nn.Module):
             envelope = 1.0 + 20*t**7 - 70*t**6 + 84*t**5 - 35*t**4
         else:
             raise ValueError("SmoothstepCutoff supports p=3, 5, or 7. Got ", p)
-        return np.where(x < r_min, 1.0, np.where(x > r_max, 0.0, envelope))
+        # return np.where(x < r_min, 1.0, np.where(x > r_max, 0.0, envelope))
+        return torch.where(x < r_min,
+                           torch.ones_like(envelope),
+                           torch.where(x > r_max,
+                                       torch.zeros_like(envelope),
+                                       envelope),
+                          )
 
     def __repr__(self):
         return f"{self.__class__.__name__}(p={self.p}, r_min={self.r_min}, r_max={self.r_max})"
@@ -296,6 +302,7 @@ class UniversalZBLBasis(torch.nn.Module):
                 dtype=torch.get_default_dtype(),
             ),
         )
+        self.register_buffer("p", torch.tensor(p, dtype=torch.int))
         self.register_buffer("a_exp", torch.tensor(0.23))
         self.register_buffer("a_prefactor", torch.tensor(0.46848))
 
@@ -361,6 +368,7 @@ class NLHBasis(torch.nn.Module):
                 dtype=torch.get_default_dtype(),
             ),
         )
+        self.register_buffer("p", torch.tensor(p, dtype=torch.int))
 
     def forward(
         self,
@@ -376,15 +384,23 @@ class NLHBasis(torch.nn.Module):
         )
         Z_u = node_atomic_numbers[sender].to(torch.int64)
         Z_v = node_atomic_numbers[receiver].to(torch.int64)
-        # TODO support Z>92 by reusing nlh Z=92 params or uniZBL...
-        if Z_u > 92 or Z_v > 92:
-            raise ValueError("NLH only supports atomic numbers Z<=92, use universal ZBL instead")
-        # get NLH params by Z
-        if Z_u <= Z_v:
-            a1, b1, a2, b2, a3, b3 = self.nlh_params[Z_u, Z_v]
-        else:
-            a1, b1, a2, b2, a3, b3 = self.nlh_params[Z_v, Z_u]
-        phi = a1 * torch.exp(-b1 * x) + a2 * torch.exp(-b2 * x) + a3 * torch.exp(-b3 * x)
+
+        # TODO support Z>92 by adding params fitted to ZBL or re-use lower-Z
+        if ((Z_u > 92) | (Z_v > 92)).any().item():
+            max_Z = torch.maximum(Z_u.max(), Z_v.max()).item()
+            raise ValueError(
+                f"NLH only supports atomic numbers Z<=92, got max Z={max_Z}. "
+                "Use universal ZBL instead."
+            )
+
+        params = self.nlh_params[Z_u, Z_v]
+        a1, b1, a2, b2, a3, b3 = params.unbind(dim=-1)
+
+        phi = (
+            a1 * torch.exp(-b1 * x)
+            + a2 * torch.exp(-b2 * x)
+            + a3 * torch.exp(-b3 * x)
+        )
         v_edges = (14.3996 * Z_u * Z_v) / x * phi
         r_max = 0.7 * (self.covalent_radii[Z_u] + self.covalent_radii[Z_v])
         r_min = 0.5 * r_max
@@ -408,15 +424,12 @@ class AgnesiTransform(torch.nn.Module):
         q: float = 0.9183,
         p: float = 4.5791,
         a: float = 1.0805,
-        r0_prefactor: float = 0.5,
         trainable=False,
     ):
         super().__init__()
         self.register_buffer("q", torch.tensor(q, dtype=torch.get_default_dtype()))
         self.register_buffer("p", torch.tensor(p, dtype=torch.get_default_dtype()))
         self.register_buffer("a", torch.tensor(a, dtype=torch.get_default_dtype()))
-        self.register_buffer("r0_prefactor",
-                      torch.tensor(r0_prefactor, dtype=torch.get_default_dtype()))
         self.register_buffer(
             "covalent_radii",
             torch.tensor(
@@ -443,7 +456,7 @@ class AgnesiTransform(torch.nn.Module):
         )
         Z_u = node_atomic_numbers[sender].to(torch.int64)
         Z_v = node_atomic_numbers[receiver].to(torch.int64)
-        r_0: torch.Tensor = self.r0_prefactor * (self.covalent_radii[Z_u] + self.covalent_radii[Z_v])
+        r_0: torch.Tensor = 0.5 * (self.covalent_radii[Z_u] + self.covalent_radii[Z_v])
         r_over_r_0 = x / r_0
         return (
             1
@@ -456,8 +469,7 @@ class AgnesiTransform(torch.nn.Module):
 
     def __repr__(self):
         return (
-            f"{self.__class__.__name__}(a={self.a:.4f}, q={self.q:.4f}, p={self.p:.4f}, "
-            f"r0_prefactor={self.r0_prefactor:.4f})"
+            f"{self.__class__.__name__}(a={self.a:.4f}, q={self.q:.4f}, p={self.p:.4f})"
         )
 
 

@@ -516,7 +516,7 @@ class ScaleShiftMACE(MACE):
         if hasattr(self, "pair_repulsion"):
             pair_node_energy = self.pair_repulsion_fn(
                 lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
-            )
+            ) / self.scale_shift.scale
             if is_lammps:
                 pair_node_energy = pair_node_energy[: lammps_natoms[0]]
         else:
