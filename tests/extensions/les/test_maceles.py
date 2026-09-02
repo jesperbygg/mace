@@ -427,3 +427,41 @@ def test_les_readout_layout_invariance(block_cls):
     )
 
     assert torch.allclose(v_mulir, v_irmul, atol=1e-6)
+
+
+@pytest.mark.les
+@pytest.mark.skipif(not LES_AVAILABLE, reason="LES library is not available")
+def test_keep_neutral_does_not_mutate_stored_bec(
+    maceles_model_path: Path, fitting_configs
+):
+    """keep_neutral corrects the field forces, not the BEC handed to callers.
+
+    On the 3-D BEC layout the neutralisation used to run in place on the array
+    stored in results, so the same flag changed what callers read back while
+    the 4-D layout was untouched.
+    """
+
+    def stored_bec(keep_neutral: bool):
+        calc = MACECalculator(
+            model_paths=str(maceles_model_path),
+            device="cpu",
+            default_dtype="float32",
+            compute_bec=True,
+            external_field=[0.1, 0.0, 0.0],
+            keep_neutral=keep_neutral,
+        )
+        atoms = fitting_configs[2].copy()
+        atoms.calc = calc
+        # float64 ambient against a float32 model on purpose. Anything the
+        # forward creates without an explicit dtype follows the process-wide
+        # default, and the resulting mismatch only shows up in the backward.
+        # Leaving this to test ordering made it an intermittent xdist failure.
+        with default_dtype(torch.float64):
+            atoms.get_potential_energy()
+        return calc.results["bec"]
+
+    bec_neutral = stored_bec(True)
+    bec_raw = stored_bec(False)
+
+    assert bec_neutral.ndim == 3, "this guards the aliasing-prone 3-D layout"
+    assert np.allclose(bec_neutral, bec_raw)
