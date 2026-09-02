@@ -399,6 +399,7 @@ class RadialEmbeddingBlock(torch.nn.Module):
         num_polynomial_cutoff: int,
         radial_type: str = "bessel",
         distance_transform: str = "None",
+        distance_transform_prefactor: Optional[float] = None,
         apply_cutoff: bool = True,
     ):
         super().__init__()
@@ -409,9 +410,19 @@ class RadialEmbeddingBlock(torch.nn.Module):
         elif radial_type == "chebyshev":
             self.bessel_fn = ChebychevBasis(r_max=r_max, num_basis=num_bessel)
         if distance_transform == "Agnesi":
-            self.distance_transform = AgnesiTransform()
+            if distance_transform_prefactor is None:
+                self.distance_transform = AgnesiTransform()
+            else:
+                self.distance_transform = AgnesiTransform(
+                    prefactor=distance_transform_prefactor
+                )
         elif distance_transform == "Soft":
-            self.distance_transform = SoftTransform()
+            if distance_transform_prefactor is None:
+                self.distance_transform = SoftTransform()
+            else:
+                self.distance_transform = SoftTransform(
+                    prefactor=distance_transform_prefactor
+                )
         self.cutoff_fn = PolynomialCutoff(r_max=r_max, p=num_polynomial_cutoff)
         self.out_dim = num_bessel
         self.apply_cutoff = apply_cutoff

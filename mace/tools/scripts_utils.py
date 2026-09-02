@@ -257,6 +257,26 @@ def extract_config_mace_model(model: torch.nn.Module) -> Dict[str, Any]:
             return "Soft"
         return radial.distance_transform.__class__.__name__
 
+    def radial_to_transform_prefactor(radial):
+        if not hasattr(radial, "distance_transform"):
+            return None
+        if hasattr(radial.distance_transform, "prefactor"):
+            return radial.distance_transform.prefactor.item()
+        return None
+
+    class_name_to_pair_repulsion_type = {
+        "ZBLBasis": "legacy",
+        "UniversalZBLBasis": "zbl",
+        "NLHBasis": "nlh",
+    }
+    pair_repulsion_type = (
+        class_name_to_pair_repulsion_type.get(
+            model.pair_repulsion_fn.__class__.__name__, "legacy"
+        )
+        if hasattr(model, "pair_repulsion_fn")
+        else "legacy"
+    )
+
     if hasattr(model, "scale_shift"):
         scale = model.scale_shift.scale
         shift = model.scale_shift.shift
@@ -324,7 +344,11 @@ def extract_config_mace_model(model: torch.nn.Module) -> Dict[str, Any]:
         "apply_cutoff": model.apply_cutoff if hasattr(model, "apply_cutoff") else True,
         "radial_MLP": extract_radial_MLP(model),
         "pair_repulsion": hasattr(model, "pair_repulsion_fn"),
+        "pair_repulsion_type": pair_repulsion_type,
         "distance_transform": radial_to_transform(model.radial_embedding),
+        "distance_transform_prefactor": radial_to_transform_prefactor(
+            model.radial_embedding
+        ),
         "heads": heads,
     }
     if model.__class__.__name__ == "MagneticScaleShiftMACE":
@@ -584,7 +608,17 @@ def convert_from_json_format(dict_input):
     dict_output["radial_type"] = dict_input["radial_type"]
     dict_output["radial_MLP"] = ast.literal_eval(dict_input["radial_MLP"])
     dict_output["pair_repulsion"] = ast.literal_eval(dict_input["pair_repulsion"])
+    pair_repulsion_type = dict_input.get("pair_repulsion_type")
+    if pair_repulsion_type in (None, "None"):
+        pair_repulsion_type = "legacy"
+    dict_output["pair_repulsion_type"] = pair_repulsion_type
     dict_output["distance_transform"] = dict_input["distance_transform"]
+    distance_transform_prefactor = dict_input.get("distance_transform_prefactor")
+    if distance_transform_prefactor in (None, "None"):
+        distance_transform_prefactor = None
+    else:
+        distance_transform_prefactor = float(distance_transform_prefactor)
+    dict_output["distance_transform_prefactor"] = distance_transform_prefactor
     dict_output["atomic_inter_scale"] = float(dict_input["atomic_inter_scale"])
     dict_output["atomic_inter_shift"] = float(dict_input["atomic_inter_shift"])
 

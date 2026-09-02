@@ -424,12 +424,16 @@ class AgnesiTransform(torch.nn.Module):
         q: float = 0.9183,
         p: float = 4.5791,
         a: float = 1.0805,
+        prefactor: float = 0.5,
         trainable=False,
     ):
         super().__init__()
         self.register_buffer("q", torch.tensor(q, dtype=torch.get_default_dtype()))
         self.register_buffer("p", torch.tensor(p, dtype=torch.get_default_dtype()))
         self.register_buffer("a", torch.tensor(a, dtype=torch.get_default_dtype()))
+        self.register_buffer(
+            "prefactor", torch.tensor(prefactor, dtype=torch.get_default_dtype())
+        )
         self.register_buffer(
             "covalent_radii",
             torch.tensor(
@@ -456,7 +460,9 @@ class AgnesiTransform(torch.nn.Module):
         )
         Z_u = node_atomic_numbers[sender].to(torch.int64)
         Z_v = node_atomic_numbers[receiver].to(torch.int64)
-        r_0: torch.Tensor = 0.5 * (self.covalent_radii[Z_u] + self.covalent_radii[Z_v])
+        r_0: torch.Tensor = self.prefactor * (
+            self.covalent_radii[Z_u] + self.covalent_radii[Z_v]
+        )
         r_over_r_0 = x / r_0
         return (
             1
@@ -469,7 +475,8 @@ class AgnesiTransform(torch.nn.Module):
 
     def __repr__(self):
         return (
-            f"{self.__class__.__name__}(a={self.a:.4f}, q={self.q:.4f}, p={self.p:.4f})"
+            f"{self.__class__.__name__}(a={self.a:.4f}, q={self.q:.4f}, "
+            f"p={self.p:.4f}, prefactor={self.prefactor:.4f})"
         )
 
 
@@ -481,17 +488,22 @@ class SoftTransform(torch.nn.Module):
     which smoothly transitions from ~p1 for x << p1 to ~x for x >> r0.
     """
 
-    def __init__(self, alpha: float = 4.0, trainable=False):
+    def __init__(self, alpha: float = 4.0, prefactor: float = 1.0, trainable=False):
         """
         Args:
             p1 (float): Lower "clamp" point.
             alpha (float): Steepness; if None, defaults to ~6/(r0-p1).
+            prefactor (float): Multiplier for the sum of covalent radii used to
+                define the transform length scale r_0 = prefactor * (r_covA + r_covB).
             trainable (bool): Whether to make parameters trainable.
         """
         super().__init__()
         # Initialize parameters
         self.register_buffer(
             "alpha", torch.tensor(alpha, dtype=torch.get_default_dtype())
+        )
+        self.register_buffer(
+            "prefactor", torch.tensor(prefactor, dtype=torch.get_default_dtype())
         )
         if trainable:
             self.alpha = torch.nn.Parameter(self.alpha.clone())
@@ -527,7 +539,9 @@ class SoftTransform(torch.nn.Module):
         )
         Z_u = node_atomic_numbers[sender].to(torch.int64)
         Z_v = node_atomic_numbers[receiver].to(torch.int64)
-        r_0: torch.Tensor = self.covalent_radii[Z_u] + self.covalent_radii[Z_v]
+        r_0: torch.Tensor = self.prefactor * (
+            self.covalent_radii[Z_u] + self.covalent_radii[Z_v]
+        )
         return r_0
 
     def forward(
@@ -547,7 +561,10 @@ class SoftTransform(torch.nn.Module):
         return p_0 + (x - p_0) * s_x
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(alpha={self.alpha.item():.4f})"
+        return (
+            f"{self.__class__.__name__}(alpha={self.alpha.item():.4f}, "
+            f"prefactor={self.prefactor.item():.4f})"
+        )
 
 
 class RadialMLP(torch.nn.Module):

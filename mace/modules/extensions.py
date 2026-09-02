@@ -63,7 +63,7 @@ from .field_blocks import (
     field_readout_blocks,
     field_update_blocks,
 )
-from .radial import ZBLBasis
+from .radial import NLHBasis, UniversalZBLBasis, ZBLBasis
 from .utils import get_edge_vectors_and_lengths, get_symmetric_displacement
 
 
@@ -1439,6 +1439,7 @@ class MagneticMACE(torch.nn.Module):
         correlation: Union[int, List[int]],
         gate: Optional[Callable],
         pair_repulsion: bool = False,
+        pair_repulsion_type: str = "legacy",
         apply_cutoff: bool = True,
         use_reduced_cg: bool = True,
         use_so3: bool = False,
@@ -1446,6 +1447,7 @@ class MagneticMACE(torch.nn.Module):
         use_last_readout_only: bool = False,
         use_embedding_readout: bool = False,
         distance_transform: str = "None",
+        distance_transform_prefactor: Optional[float] = None,
         use_magmom_one_body: Optional[bool] = False,
         edge_irreps: Optional[o3.Irreps] = None,
         use_edge_irreps_first: bool = False,  # pylint: disable=unused-argument
@@ -1518,10 +1520,21 @@ class MagneticMACE(torch.nn.Module):
             num_polynomial_cutoff=num_polynomial_cutoff,
             radial_type=radial_type,
             distance_transform=distance_transform,
+            distance_transform_prefactor=distance_transform_prefactor,
         )
         edge_feats_irreps = o3.Irreps(f"{self.radial_embedding.out_dim}x0e")
         if pair_repulsion:
-            self.pair_repulsion_fn = ZBLBasis(p=num_polynomial_cutoff)
+            if pair_repulsion_type.lower() == "legacy":
+                self.pair_repulsion_fn = ZBLBasis(p=num_polynomial_cutoff)
+            elif pair_repulsion_type.lower() == "nlh":
+                self.pair_repulsion_fn = NLHBasis()
+            elif pair_repulsion_type.lower() == "zbl":
+                self.pair_repulsion_fn = UniversalZBLBasis()
+            else:
+                raise ValueError(
+                    f"Unrecognized pair_repulsion_type: {pair_repulsion_type!r}. "
+                    "Expected one of 'legacy', 'nlh', 'zbl'."
+                )
             self.pair_repulsion = True
 
         sh_irreps = o3.Irreps.spherical_harmonics(max_ell)

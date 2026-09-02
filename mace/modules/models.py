@@ -71,6 +71,7 @@ class MACE(torch.nn.Module):
         use_last_readout_only: bool = False,
         use_embedding_readout: bool = False,
         distance_transform: str = "None",
+        distance_transform_prefactor: Optional[float] = None,
         edge_irreps: Optional[o3.Irreps] = None,
         use_edge_irreps_first: bool = False,
         radial_MLP: Optional[List[int]] = None,
@@ -137,20 +138,23 @@ class MACE(torch.nn.Module):
             num_polynomial_cutoff=num_polynomial_cutoff,
             radial_type=radial_type,
             distance_transform=distance_transform,
+            distance_transform_prefactor=distance_transform_prefactor,
             apply_cutoff=apply_cutoff,
         )
         edge_feats_irreps = o3.Irreps(f"{self.radial_embedding.out_dim}x0e")
         if pair_repulsion:
             self.pair_repulsion = True
-            if pair_repulsion_type == "legacy":
+            if pair_repulsion_type.lower() == "legacy":
                 self.pair_repulsion_fn = ZBLBasis(p=num_polynomial_cutoff)
             elif pair_repulsion_type.lower() == "nlh":
                 self.pair_repulsion_fn = NLHBasis()
             elif pair_repulsion_type.lower() == "zbl":
                 self.pair_repulsion_fn = UniversalZBLBasis()
             else:
-                # bad user input: silent fall back to universal zbl for most flexibility
-                self.pair_repulsion_fn = UniversalZBLBasis()
+                raise ValueError(
+                    f"Unrecognized pair_repulsion_type: {pair_repulsion_type!r}. "
+                    "Expected one of 'legacy', 'nlh', 'zbl'."
+                )
 
         if not use_so3:
             sh_irreps = o3.Irreps.spherical_harmonics(max_ell)
@@ -517,7 +521,7 @@ class ScaleShiftMACE(MACE):
         if hasattr(self, "pair_repulsion"):
             pair_node_energy = self.pair_repulsion_fn(
                 lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
-            ) / self.scale_shift.scale
+            ) / torch.atleast_1d(self.scale_shift.scale)[node_heads]
             if is_lammps:
                 pair_node_energy = pair_node_energy[: lammps_natoms[0]]
         else:
@@ -657,6 +661,9 @@ class AtomicDipolesMACE(torch.nn.Module):
         use_reduced_cg: bool = True,  # pylint: disable=unused-argument
         use_so3: bool = False,  # pylint: disable=unused-argument
         distance_transform: str = "None",  # pylint: disable=unused-argument
+        distance_transform_prefactor: Optional[float] = None,  # pylint: disable=unused-argument
+        pair_repulsion: bool = False,  # pylint: disable=unused-argument
+        pair_repulsion_type: str = "legacy",  # pylint: disable=unused-argument
         radial_type: Optional[str] = "bessel",
         radial_MLP: Optional[List[int]] = None,
         cueq_config: Optional[Dict[str, Any]] = None,  # pylint: disable=unused-argument
@@ -873,6 +880,7 @@ class AtomicDielectricMACE(torch.nn.Module):
         use_reduced_cg: bool = True,  # pylint: disable=unused-argument
         use_so3: bool = False,  # pylint: disable=unused-argument
         distance_transform: str = "None",  # pylint: disable=unused-argument
+        distance_transform_prefactor: Optional[float] = None,  # pylint: disable=unused-argument
         radial_type: Optional[str] = "bessel",
         radial_MLP: Optional[List[int]] = None,
         cueq_config: Optional[Dict[str, Any]] = None,  # pylint: disable=unused-argument
@@ -886,6 +894,7 @@ class AtomicDielectricMACE(torch.nn.Module):
         use_embedding_readout: bool = False,  # pylint: disable=unused-argument
         readout_cls: Optional[Callable] = None,  # pylint: disable=unused-argument
         pair_repulsion: bool = False,  # pylint: disable=unused-argument
+        pair_repulsion_type: str = "legacy",  # pylint: disable=unused-argument
         heads: Optional[List[str]] = None,  # pylint: disable=unused-argument
         only_dipole: bool = False,  # pylint: disable=unused-argument
         atomic_energies_fn: Optional[Callable] = None,
@@ -1227,11 +1236,14 @@ class EnergyDipolesMACE(torch.nn.Module):
         use_reduced_cg: bool = True,  # pylint: disable=unused-argument
         use_so3: bool = False,  # pylint: disable=unused-argument
         distance_transform: str = "None",  # pylint: disable=unused-argument
+        distance_transform_prefactor: Optional[float] = None,  # pylint: disable=unused-argument
         radial_MLP: Optional[List[int]] = None,
         cueq_config: Optional[Dict[str, Any]] = None,  # pylint: disable=unused-argument
         oeq_config: Optional[Dict[str, Any]] = None,  # pylint: disable=unused-argument
         edge_irreps: Optional[o3.Irreps] = None,  # pylint: disable=unused-argument
         use_edge_irreps_first: bool = False,  # pylint: disable=unused-argument
+        pair_repulsion: bool = False,  # pylint: disable=unused-argument
+        pair_repulsion_type: str = "legacy",  # pylint: disable=unused-argument
     ):
         super().__init__()
         self.register_buffer(

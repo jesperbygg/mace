@@ -189,6 +189,16 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         choices=["None", "Agnesi", "Soft"],
     )
     parser.add_argument(
+        "--distance_transform_prefactor",
+        help=(
+            "multiplier for the sum of covalent radii defining the distance transform "
+            "length scale, r_0 = prefactor * (r_covA + r_covB). If unset, the "
+            "per-transform default is used (0.5 for Agnesi, 1.0 for Soft)"
+        ),
+        type=float,
+        default=None,
+    )
+    parser.add_argument(
         "--apply_cutoff",
         help="apply cutoff to the radial basis functions before MLP",
         type=str2bool,
