@@ -306,6 +306,8 @@ class UniversalZBLBasis(torch.nn.Module):
         self.register_buffer("a_exp", torch.tensor(0.23))
         self.register_buffer("a_prefactor", torch.tensor(0.46848))
 
+        self.smoothstep_cutoff = SmoothstepCutoff(r_min=0.5, r_max=1.0, p=p)
+
     def forward(
         self,
         x: torch.Tensor,
@@ -333,7 +335,7 @@ class UniversalZBLBasis(torch.nn.Module):
         v_edges = (14.3996 * Z_u * Z_v) / x * phi
         r_max = 0.7 * (self.covalent_radii[Z_u] + self.covalent_radii[Z_v])
         r_min = 0.5 * r_max
-        envelope = SmoothstepCutoff.calculate_envelope(x, r_min, r_max, self.p)
+        envelope = self.smoothstep_cutoff.calculate_envelope(x, r_min, r_max, self.p)
         v_edges = 0.5 * v_edges * envelope
         V_ZBL = scatter_sum(v_edges, receiver, dim=0, dim_size=node_attrs.size(0))
         return V_ZBL.squeeze(-1)
@@ -370,6 +372,8 @@ class NLHBasis(torch.nn.Module):
         )
         self.register_buffer("p", torch.tensor(p, dtype=torch.int))
 
+        self.smoothstep_cutoff = SmoothstepCutoff(r_min=0.5, r_max=1.0, p=p)
+
     def forward(
         self,
         x: torch.Tensor,
@@ -404,7 +408,7 @@ class NLHBasis(torch.nn.Module):
         v_edges = (14.3996 * Z_u * Z_v) / x * phi
         r_max = 0.7 * (self.covalent_radii[Z_u] + self.covalent_radii[Z_v])
         r_min = 0.5 * r_max
-        envelope = SmoothstepCutoff.calculate_envelope(x, r_min, r_max, self.p)
+        envelope = self.smoothstep_cutoff.calculate_envelope(x, r_min, r_max, self.p)
         v_edges = 0.5 * v_edges * envelope
         V_NLH = scatter_sum(v_edges, receiver, dim=0, dim_size=node_attrs.size(0))
         return V_NLH.squeeze(-1)
